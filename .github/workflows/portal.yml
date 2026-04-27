@@ -1,0 +1,81 @@
+name: Build and Deploy StudentPortal
+
+on:
+  push:
+    branches: 
+      - main
+    paths: 
+      - 'src/StudentPortal/**'
+      - 'src/Models/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+
+env:
+  CONFIGURATION: release
+  DOTNET_VERSION: '8.x'
+
+jobs:
+  build-studentPortal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore
+        run: dotnet restore src/StudentPortal/StudentPortal.csproj
+
+      - name: Build
+        run: dotnet build src/StudentPortal/StudentPortal.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test
+        run: dotnet test src/Api.Tests/Api.Tests.csproj --verbosity normal --logger trx --results-directory TestResults
+
+      - name: Publish studentPortal
+        run: dotnet publish --configuration ${{ env.CONFIGURATION }} --output PublishstudentPortal src/StudentPortal/StudentPortal.csproj
+
+      - name: Upload studentPortal
+        uses: actions/upload-artifact@v5
+        with:
+          name: studentPortal
+          path: PublishstudentPortal
+
+  release:
+    needs: build-studentPortal
+    runs-on: ubuntu-latest
+    environment: 
+      name: prod
+      url: ${{ steps.deploy-api.outputs.webapp-url }}
+    steps:
+      - name: Download StudentPortal Artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: studentPortal
+          path: studentPortal-artifact
+
+      - name: Variable Substitution API
+        uses: microsoft/variable-substitution@v1
+        with:
+          files: studentPortal-artifact/appsettings.json
+        env:
+          SchoolApi.BaseUri: "https://${{ vars.API_NAME }}.azurewebsites.net"
+          ApplicationInsights.ConnectionString: ${{ vars.APP_INSIGHTS_CONN_STRING }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy studentPortal
+        id: deploy-api
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ vars.STUDENTPORTAL_NAME }}
+          package: studentPortal-artifact

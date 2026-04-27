@@ -1,0 +1,29 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome</h1>
+    <p>Enter details to look up student record</p>
+</div>
+
+<div class="container">
+    <form method="get">
+        <input type="hidden" name="handler" value="student" />
+        <div class="mb-3">
+            <label for="firstmidnameinput" class="form-label">First Name</label>
+            <input type="text" name="firstmidname" class="form-control" id="firstmidnameinput" >
+        </div>
+        <div class="mb-3">
+            <label for="lastnameinput" class="form-label">Last Name</label>
+            <input type="text" name="lastname" class="form-control" id="lastnameinput" >
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+</div>
+
+<div class="container">
+    @* @await Html.RenderPartial("_StudentDataPartial.cshtml", new TFL.DevOps.Models.Student) *@
+</div>

@@ -1,0 +1,120 @@
+name: Build and Deploy API
+
+on:
+  push:
+    branches: 
+      - main
+    paths: 
+      - 'src/Api/**'
+      - 'src/Models/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  
+env:
+  CONFIGURATION: release
+  DOTNET_VERSION: '8.x'
+
+jobs:
+  build-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      
+      - name: Restore
+        run: dotnet restore src/Api/Api.csproj
+
+      - name: Build
+        run: dotnet build src/Api/Api.csproj --configuration ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test
+        run: dotnet test src/Api.Tests/Api.Tests.csproj --verbosity normal --logger trx --results-directory TestResults
+
+      - name: Publish Api
+        run: dotnet publish --configuration ${{ env.CONFIGURATION }} --output PublishApi src/Api/Api.csproj
+
+      - name: Upload Api
+        uses: actions/upload-artifact@v5
+        with:
+          name: api
+          path: PublishApi
+  
+  build-migration-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Entity Framework tool
+        run: dotnet tool install --global dotnet-ef --version 8.*
+
+      - name: Restore
+        run: dotnet restore src/Api/Api.csproj
+
+      - name: create migration script
+        run: dotnet ef migrations script --project src/Api/Api.csproj --configuration ${{ env.CONFIGURATION }} --output migrationScript/migration.sql --idempotent --verbose
+
+      - name: Upload Migration Script
+        uses: actions/upload-artifact@v5
+        with:
+          name: script
+          path: migrationScript
+
+  release:
+    needs: [build-api, build-migration-script]
+    runs-on: ubuntu-latest
+    environment: 
+      name: prod
+      url: ${{ steps.deploy-api.outputs.webapp-url }}
+    steps:
+      - name: Download Api Artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: api
+          path: api-artifact
+
+      - name: Download DB artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: script
+          path: db-artifact
+
+      - name: Variable Substitution API
+        uses: microsoft/variable-substitution@v1
+        with:
+          files: api-artifact/appsettings.json
+        env:
+          DatabaseConnection.ServerName: ${{ vars.DATABASE_SERVER_NAME }}
+          DatabaseConnection.DatabaseName: ${{ vars.DATABASE_NAME }}
+          DatabaseConnection.Password: ${{ secrets.APP_USER_PASSWORD }}
+          ApplicationInsights.ConnectionString: ${{ vars.APP_INSIGHTS_CONN_STRING }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Database
+        uses: azure/sql-action@v2
+        with:
+          connection-string: '${{ vars.DATABASE_CONN_STRING }}password=${{ secrets.SQL_ADMIN_PASSWORD }}'
+          path: db-artifact/migration.sql
+
+      - name: Deploy API
+        id: deploy-api
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ vars.API_NAME }}
+          package: api-artifact

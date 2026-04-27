@@ -1,0 +1,9 @@
+# Example .gitignore for Candidate Repository
+# Add this to your .gitignore to keep assessor materials in a separate branch
+
+# Assessor-only materials
+AssessorGuide/
+
+# Or use separate branches:
+# - 'main' or 'assessor' branch: includes AssessorGuide/
+# - 'candidate' branch: excludes AssessorGuide/

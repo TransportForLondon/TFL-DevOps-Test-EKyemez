@@ -1,0 +1,15 @@
+@using TFL.DevOps.Models
+@model Student
+
+<div class="container">
+    <h3>Student Name</h3>
+    <p>@Model.FirstMidName @Model.LastName</p>
+
+    <h3>Enrollment Date</h3>
+    <p>@Model.EnrollmentDate</p>
+
+    <h3>Total Credits</h3>
+    <p>@Model.TotalCredits</p>
+
+    <a asp-page="/Index">Back</a>
+</div>

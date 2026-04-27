@@ -1,0 +1,54 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Infrastructure/**'
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GHPAT_TOKEN || github.token }}
+
+permissions:
+  contents: read
+  id-token: write  
+
+jobs:
+  prod:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Azure CLI
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Deploy Template
+      id: deploy-template
+      uses: azure/arm-deploy@v1
+      with:
+        scope: resourcegroup
+        subscriptionId: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        resourceGroupName: ${{ vars.RESOURCE_GROUP_NAME }}
+        template: ./Infrastructure/main.bicep
+        deploymentMode: Incremental
+        deploymentName: 'school-infra-deployment'
+        parameters: Infrastructure/main.parameters.json environmentName=prod sqlAdminPassword=${{ secrets.SQL_ADMIN_PASSWORD }} appUserPassword=${{ secrets.APP_USER_PASSWORD }} resourceToken=${{ vars.RESOURCE_TOKEN }}
+        failOnStdErr: false
+        
+    - name: Display Environment Variables
+      env:
+        GH_TOKEN: ${{ env.GITHUB_TOKEN }}
+      run: |
+        echo "${{ steps.deploy-template.outputs.API_NAME }}"
+        echo "${{ steps.deploy-template.outputs.DATABASE_SERVER_NAME }}"
+        echo "${{ steps.deploy-template.outputs.DATABASE_NAME }}"
+        echo "${{ steps.deploy-template.outputs.STUDENTPORTAL_NAME }}"
+        echo "${{ steps.deploy-template.outputs.DATAUPLOAD_FUNCTIONAPP_NAME }}"
+        echo "${{ steps.deploy-template.outputs.APPLICATIONINSIGHTS_CONNECTION_STRING }}"
